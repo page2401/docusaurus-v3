@@ -91,6 +91,11 @@ const config = {
             position: 'left',
           },
           {
+            to: '/05-code-blocks',
+            label: '05. 代码高亮',
+            position: 'left',
+          },
+          {
             href: 'https://page.2401.xyz/',
             label: '对比总站',
             position: 'right',

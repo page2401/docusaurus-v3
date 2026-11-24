@@ -1,0 +1,114 @@
+---
+title: "05. 高阶代码块与语法高亮"
+description: "测试 Docusaurus v3 (3.10.2) 内置 Prism (prism-react-renderer) 的 title 标题栏、行区间与魔法注释高亮、Diff 块取舍以及 @theme/Tabs 多语言切换组。"
+---
+
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+# 05. 高阶代码块与语法高亮（Docusaurus v3 派生版）
+
+技术文档中超过 40% 的篇幅由代码块构成，但标准 CommonMark / GitHub Flavored Markdown 仅定义了围栏语言标识（```` ```ts ````），并未定义文件名标题栏、指定行高亮、带词法着色的行级 Diff 以及多语言 Tab 切换组。本页由原始 GFM 母版派生适配至 **Docusaurus v3 (`3.10.2`)**，实测其内置 **Prism (`prism-react-renderer`)** 引擎与 `@theme/Tabs` 组件能力。
+
+## 1. 代码块文件名标题栏与基础语法高亮
+
+Docusaurus `@docusaurus/theme-classic` 原生解析代码块信息串中的 `title="..."` 属性，渲染独立顶栏与悬停复制按钮（注意属性值若含斜杠或空格须用双引号包裹）：
+
+```ts title="scripts/resolve-route.ts"
+export interface RouteContext {
+  basePath: string
+  slug: string
+  cleanUrls: boolean
+}
+
+export function formatDocRoute(ctx: RouteContext): string {
+  const prefix = ctx.basePath.endsWith('/') ? ctx.basePath : `${ctx.basePath}/`
+  const normalized = ctx.slug.replace(/^\/+|\/+$/g, '')
+  if (!normalized || normalized === 'index') return prefix
+  return ctx.cleanUrls ? `${prefix}${normalized}/` : `${prefix}${normalized}.html`
+}
+```
+
+## 2. 关键行聚焦：区间语法 `{3,7-9}` 与魔法注释
+
+针对不支持注释的纯 JSON 配置，Docusaurus 支持直接在语言名后声明 `{3,7-9}` 行号区间；而针对允许注释的 TS/JS 代码，则内置了 `// highlight-next-line` 与 `// highlight-start` ... `// highlight-end` 魔法注释（编译时自动剥离注释行，避免行号偏移后区间失准）：
+
+```json {3,7-9} title="benchmark.config.json"
+{
+  "id": "ssg-benchmark",
+  "routeStyle": "clean",
+  "strictZeroCdn": true,
+  "markdown": {
+    "mathEngine": "katex",
+    "diagramEngine": "mermaid",
+    "lineHighlight": true,
+    "codeTransformers": ["diff", "focus"]
+  }
+}
+```
+
+```ts title="scripts/verify-magic-comment.ts"
+export function normalizeBase(rawBase: string): string {
+  const withLeading = rawBase.startsWith('/') ? rawBase : `/${rawBase}`
+  // highlight-next-line
+  return withLeading.endsWith('/') ? withLeading : `${withLeading}/`
+}
+```
+
+## 3. 代码增删对比着色（Prism `diff` 局限与取舍）
+
+与基于 TextMate 语法叠加转换器的 Shiki / Expressive Code 不同，Docusaurus 默认的 Prism 引擎不支持开箱即用的 `// [!code --]` / `// [!code ++]` 双重着色：要么使用标准 `diff` 语言块获得 +/- 符号着色（代价是丢失 TypeScript 词法高亮），要么在 `docusaurus.config.js` 的 `themeConfig.prism.magicComments` 中自行注册红绿背景类名：
+
+```diff title="scripts/mount-subsite.patch"
+ export function mountSubsite(baseDir: string, subPath: string): string | null {
+-  const cleanRel = decodeURIComponent(subPath).replace(/\.\./g, '')
+-  return `${baseDir}/${cleanRel}`
++  const resolvedBase = path.resolve(baseDir)
++  const target = path.resolve(resolvedBase, decodeURIComponent(subPath).replace(/^\/+/, ''))
++  return target.startsWith(`${resolvedBase}${path.sep}`) ? target : null
+ }
+```
+
+## 4. 多语言运行时命令组（`@theme/Tabs` + `@theme/TabItem`）
+
+Docusaurus 没有提供类似 VitePress `::: code-group` 的纯 Markdown 语法糖，官方标准方案是在文档顶部显式引入 `@theme/Tabs` 与 `@theme/TabItem` JSX 组件，并通过 `groupId` 在 `localStorage` 中持久化用户的工具链偏好：
+
+<Tabs groupId="runtime-toolchain">
+  <TabItem value="node" label="Node.js (package.json)" default>
+
+```bash
+npm ci && npm run build
+```
+
+  </TabItem>
+  <TabItem value="deno" label="Deno 2 (deno.json)">
+
+```bash
+deno task build
+```
+
+  </TabItem>
+  <TabItem value="python" label="Python (requirements.txt)">
+
+```bash
+pip install -r requirements.txt && sphinx-build -b dirhtml . _build/dirhtml
+```
+
+  </TabItem>
+  <TabItem value="ruby" label="Ruby (Gemfile)">
+
+```bash
+bundle install && bundle exec jekyll build
+```
+
+  </TabItem>
+</Tabs>
+
+## 5. 四大底层高亮引擎能力对照小结
+
+| 高亮引擎代表 | 典型采用框架 | 构建期零运行时 JS | 原生行号 / 行高亮 | 保留词法着色的 Diff |
+| :--- | :--- | :--- | :--- | :--- |
+| **Shiki / Expressive Code** | VitePress、Starlight、Fumadocs、Nextra、Rspress、Nuxt、Quartz | ✅ 纯静态内联样式 | ✅ `{1,3-5}` / `[!code highlight]` | ✅ `// [!code ++]` |
+| **Prism.js** | Docusaurus、VuePress、Eleventy (plugin)、Gatsby | ✅ 静态 Token 类名 | ✅ `{1,3-5}` / 魔法注释 | ⚠️ 需配 `magicComments` 或 `diff-highlight` |
+| **Pygments / Rouge** | MkDocs Material、Sphinx、Pelican、Jekyll | ✅ Python/Ruby 编译直出 | ✅ `hl_lines` / `emphasize-lines` | ⚠️ 仅标准 `diff` 块红绿 |
+| **Chroma / Giallo / hljs** | Hugo (Go Chroma)、Zola (Rust Giallo)、mdBook (hljs) | ✅ (mdBook 为客户端 hljs) | ✅ Hugo/Zola 原生 `hl_lines` | ⚠️ 仅标准 `diff` 块红绿 |
