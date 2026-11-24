@@ -1,0 +1,1 @@
+"use strict";(Array.isArray(self.webpackChunk_page2401_docusaurus_v3)?self.webpackChunk_page2401_docusaurus_v3:self.webpackChunk_page2401_docusaurus_v3=[]).push([[3192],{3192(e,u,s){s.d(u,{createArchitectureServices:()=>a.S});var a=s(4549);s(184)}}]);
